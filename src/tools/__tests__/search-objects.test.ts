@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSearchDatabaseObjectsToolHandler } from '../search-objects.js';
 import { ConnectorManager } from '../../connectors/manager.js';
+import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, TableColumn, TableIndex } from '../../connectors/interface.js';
 
 // Mock dependencies
@@ -75,12 +76,27 @@ describe('search_database_objects tool', () => {
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['default']);
     mockGetCurrentConnector.mockReturnValue(mockConnector);
     handler = createSearchDatabaseObjectsToolHandler();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('request tracking', () => {
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
+      const connector = createMockConnector('sqlite');
+      vi.mocked(connector.getSchemas).mockResolvedValue([]);
+      mockGetCurrentConnector.mockReturnValue(connector);
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createSearchDatabaseObjectsToolHandler('prod')({ object_type: 'schema' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'search_objects' }));
+    });
   });
 
   describe('search schemas', () => {

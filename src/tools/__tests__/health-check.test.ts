@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHealthCheckToolHandler } from "../health-check.js";
 import { ConnectorManager } from "../../connectors/manager.js";
+import { requestStore } from "../../requests/index.js";
 import type { Connector, ConnectorType, HealthCheckResult } from "../../connectors/interface.js";
 
 vi.mock("../../connectors/manager.js");
@@ -32,6 +33,10 @@ const parseToolResponse = (response: any) => JSON.parse(response.content[0].text
 
 describe("health-check tool", () => {
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+
+  beforeEach(() => {
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(["default"]);
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -82,6 +87,17 @@ describe("health-check tool", () => {
         blocks_read: 9,
       },
     });
+  });
+
+  it("tracks the bare tool name for a single source configured with --id (not \"default\")", async () => {
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(["prod"]);
+    const mockConnector = createMockConnector("sqlite", "prod", false);
+    mockGetCurrentConnector.mockReturnValue(mockConnector);
+    const addSpy = vi.spyOn(requestStore, "add");
+
+    await createHealthCheckToolHandler("prod")({}, null);
+
+    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: "health_check" }));
   });
 
   it("returns UNSUPPORTED when the connector has no getHealthCheck implementation", async () => {

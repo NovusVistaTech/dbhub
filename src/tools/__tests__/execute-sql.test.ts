@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExecuteSqlToolHandler } from '../execute-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
 import { getToolRegistry } from '../registry.js';
+import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
 
 // Mock dependencies
@@ -39,6 +40,7 @@ describe('execute-sql tool', () => {
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['default']);
     mockGetCurrentConnector.mockReturnValue(mockConnector);
 
     // Mock tool registry to return empty config (no readonly, no max_rows)
@@ -218,6 +220,20 @@ describe('execute-sql tool', () => {
       const result = await handler({ sql }, null);
 
       expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+  });
+
+  describe('request tracking', () => {
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
+      const connector = createMockConnector('sqlite', 'prod');
+      mockGetCurrentConnector.mockReturnValue(connector);
+      vi.mocked(connector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createExecuteSqlToolHandler('prod')({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'execute_sql' }));
     });
   });
 
