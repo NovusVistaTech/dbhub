@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExplainSqlToolHandler } from '../explain-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
 import { requestStore } from '../../requests/index.js';
+import { setToolMode } from '../../utils/tool-handler-helpers.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
 
 vi.mock('../../connectors/manager.js');
@@ -165,6 +166,26 @@ describe('explain-sql tool', () => {
       await handler({ sql: 'SELECT 1' }, null);
 
       expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql_prod_pg' }));
+    });
+  });
+
+  describe('request tracking in unified mode', () => {
+    afterEach(() => {
+      setToolMode('per-source');
+    });
+
+    it('tracks the bare tool name even for a multi-source deployment', async () => {
+      setToolMode('unified');
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
+      const mockConnector = createMockConnector('postgres', 'prod-pg');
+      mockGetCurrentConnector.mockReturnValue(mockConnector);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      const handler = createExplainSqlToolHandler('prod-pg');
+      await handler({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql', sourceId: 'prod-pg' }));
     });
   });
 

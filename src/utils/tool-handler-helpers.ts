@@ -11,6 +11,7 @@ import { getClientIdentifier } from "./client-identifier.js";
 import { classifyConnectionError } from "./error-classifier.js";
 import { createToolErrorResponse } from "./response-formatter.js";
 import { normalizeSourceId } from "./normalize-id.js";
+import type { ToolMode } from "../config/env.js";
 
 /**
  * Request metadata for tracking
@@ -49,6 +50,18 @@ export function toStatementsPayload(
   }));
 }
 
+// Resolved once at startup (see main() in server.ts) so a bad --tool-mode fails
+// startup instead of every request, and registration and tracking agree.
+let toolMode: ToolMode = "per-source";
+
+export function setToolMode(mode: ToolMode): void {
+  toolMode = mode;
+}
+
+export function getToolMode(): ToolMode {
+  return toolMode;
+}
+
 /**
  * Resolve the tool name a handler was actually registered under, for request
  * tracking. Mirrors resolveBuiltinToolNaming in tool-metadata.ts: single-source
@@ -60,6 +73,10 @@ export function toStatementsPayload(
  * multi-source ids containing characters normalizeSourceId rewrites.
  */
 export function resolveTrackedToolName(sourceId: string | undefined, baseName: string): string {
+  // Unified mode registers one tool under the bare name for all sources.
+  if (toolMode === "unified") {
+    return baseName;
+  }
   const isSingleSource = ConnectorManager.getAvailableSourceIds().length === 1;
   if (isSingleSource) {
     return baseName;

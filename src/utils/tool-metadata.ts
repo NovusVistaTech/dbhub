@@ -133,6 +133,55 @@ function resolveBuiltinToolNaming(sourceId: string, baseName: string, titleLabel
   return { dbType, isSingleSource, name, title, userDescPrefix };
 }
 
+// Unified mode (--tool-mode=unified): per built-in kind, the title, generic
+// intro sentence and idempotency hint. execute_sql is the only kind whose
+// read-only status and row cap vary per source.
+const UNIFIED_BUILTINS: Record<string, { title: string; intro: string; idempotent: boolean }> = {
+  execute_sql: { title: "Execute SQL", intro: "Execute SQL queries on the database named by source_id.", idempotent: false },
+  search_objects: { title: "Search Database Objects", intro: "Search and list database objects on the database named by source_id.", idempotent: true },
+  explain_sql: { title: "Explain Query Plan", intro: "Show the execution plan for a SQL statement on the database named by source_id without running it (always read-only).", idempotent: true },
+  health_check: { title: "Health Check", intro: "Report connection pool and buffer cache health metrics for the database named by source_id (read-only).", idempotent: false },
+};
+
+/**
+ * Get metadata for the single shared tool that unified mode registers for a
+ * built-in kind. Lists one line per source in `sourceIds` (the sources that
+ * enable the tool); each source's own `description`, read-only flag and row
+ * cap stay visible to the model.
+ */
+export function getUnifiedBuiltinMetadata(baseName: string, sourceIds: string[]) {
+  const { title, intro, idempotent } = UNIFIED_BUILTINS[baseName];
+  const registry = getToolRegistry();
+  let allReadOnly = true;
+
+  const lines = sourceIds.map((sourceId) => {
+    const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+    const desc = buildSourceDescriptionPrefix(sourceConfig.description).trim();
+    let line = `- ${sourceId} (${sourceConfig.type})${desc ? `: ${desc}` : ""}`;
+    if (baseName === BUILTIN_TOOL_EXECUTE_SQL) {
+      const toolConfig = registry.getBuiltinToolConfig(baseName, sourceId);
+      const maxRows = toolConfig && "max_rows" in toolConfig ? toolConfig.max_rows : undefined;
+      const readonly = toolConfig && "readonly" in toolConfig ? toolConfig.readonly : undefined;
+      if (isReadOnlyPolicy(policyFromReadonly(readonly))) line += " [READ-ONLY]";
+      else allReadOnly = false;
+      if (maxRows) line += ` (max ${maxRows} rows)`;
+    }
+    return line;
+  });
+
+  return {
+    name: baseName,
+    description: `${intro}\n${lines.join("\n")}`,
+    annotations: {
+      title,
+      readOnlyHint: allReadOnly,
+      destructiveHint: !allReadOnly,
+      idempotentHint: idempotent,
+      openWorldHint: false,
+    } satisfies ToolAnnotations,
+  };
+}
+
 /**
  * Get execute_sql tool metadata for a specific source
  * @param sourceId - The source ID to get tool metadata for

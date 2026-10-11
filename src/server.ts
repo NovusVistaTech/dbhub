@@ -9,8 +9,9 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveAuthTokens, resolveSourceConfigs, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveAuthTokens, resolveToolMode, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
+import { setToolMode } from "./utils/tool-handler-helpers.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
@@ -96,6 +97,10 @@ See documentation for more details on configuring database connections.
 `);
       process.exit(1);
     }
+
+    // Resolve once, before any database connects, so an invalid --tool-mode
+    // fails startup rather than every request.
+    setToolMode(resolveToolMode().mode);
 
     // Create connector manager and connect to database(s)
     const connectorManager = new ConnectorManager();

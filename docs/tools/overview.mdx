@@ -156,6 +156,18 @@ Tool names: `execute_sql_prod_pg` and `execute_sql_staging_mysql`
 Special characters in source IDs (hyphens, dots, etc.) are converted to underscores in tool names. For example, `prod-pg` becomes `execute_sql_prod_pg`.
 </Note>
 
+### Unified tool mode
+
+With many sources, one tool per source makes the tool list long. Start DBHub with `--tool-mode=unified` (env `DBHUB_TOOL_MODE=unified`; default `per-source`) to expose a single `execute_sql`, `search_objects` (and `explain_sql` / `health_check` when enabled) instead. Each takes a required `source_id` parameter whose allowed values are the sources that enable that tool, and the tool description lists each source with its description, `[READ-ONLY]` flag and row cap. Per-source `readonly` and `max_rows` still apply, and custom tools keep their own names. With a single source, `source_id` is still required and its enum has one value.
+
+```bash
+npx @bytebase/dbhub@latest --config dbhub.toml --tool-mode=unified
+```
+
+<Note>
+The workbench API (`/api/sources`) still reports per-source tool names in this mode.
+</Note>
+
 ## Next Steps
 
 <CardGroup cols={3}>

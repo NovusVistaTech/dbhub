@@ -510,6 +510,34 @@ function splitTokenList(value: string): string[] {
     .filter((t) => t.length > 0);
 }
 
+export type ToolMode = "per-source" | "unified";
+
+/**
+ * Resolve how built-in tools are exposed across sources.
+ *
+ * Sources (highest priority first):
+ *   1. --tool-mode=per-source|unified
+ *   2. DBHUB_TOOL_MODE environment variable
+ *
+ * "per-source" (default) registers one tool per source (`execute_sql_<id>`).
+ * "unified" registers one `execute_sql` / `search_objects` / ... that takes a
+ * required `source_id`, which keeps the tool list small with many sources.
+ */
+export function resolveToolMode(): { mode: ToolMode; source: string } {
+  const args = parseCommandLineArgs();
+
+  const cliValue = requireFlagValue("tool-mode", args, "unified");
+  const envValue = process.env.DBHUB_TOOL_MODE?.trim();
+  const value = cliValue ?? (envValue || "per-source");
+  if (value !== "per-source" && value !== "unified") {
+    throw new Error(`Invalid tool mode '${value}'. Expected 'per-source' or 'unified'.`);
+  }
+  return {
+    mode: value,
+    source: cliValue !== undefined ? "command line argument" : envValue ? "environment variable" : "default",
+  };
+}
+
 /**
  * Redact sensitive information from a DSN string
  * Replaces the password with asterisks; returns a constant placeholder if the

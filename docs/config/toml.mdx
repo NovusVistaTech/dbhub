@@ -24,6 +24,10 @@ TOML configuration enables:
 - **Environment variable interpolation**: Use `${VAR}` syntax to avoid hardcoding credentials
 - **Hot reload**: Automatically detect config changes and reload connections without restarting
 
+<Note>
+With many sources, start DBHub with `--tool-mode=unified` to expose one `execute_sql` / `search_objects` that takes a `source_id` instead of one tool per source. See [Unified tool mode](/tools/overview#unified-tool-mode).
+</Note>
+
 ## Hot Reload
 
 When using TOML configuration, DBHub automatically watches `dbhub.toml` for changes and reloads database connections without requiring a server restart.

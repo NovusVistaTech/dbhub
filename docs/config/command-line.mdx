@@ -127,6 +127,12 @@ This page covers command-line flags and environment variables. For TOML configur
   </Warning>
 </ParamField>
 
+### --tool-mode
+
+<ParamField path="--tool-mode" type="string" env="DBHUB_TOOL_MODE" default="per-source">
+  `per-source` registers one tool per source (`execute_sql_prod`). `unified` registers a single `execute_sql` / `search_objects` (plus `explain_sql` / `health_check` when enabled) that takes a required `source_id`. See [Unified tool mode](/tools/overview#unified-tool-mode).
+</ParamField>
+
 ### --auth-token
 
 <ParamField path="--auth-token" type="string" env="DBHUB_AUTH_TOKEN">

@@ -9,6 +9,7 @@ import {
   resolveHost,
   resolveId,
   resolveSourceConfigs,
+  resolveToolMode,
 } from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
 
@@ -344,6 +345,35 @@ describe('Environment Configuration Tests', () => {
         expect(() => resolveHost()).toThrow('process.exit: 1');
         expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
       });
+    });
+  });
+
+  describe('resolveToolMode', () => {
+    beforeEach(() => {
+      delete process.env.DBHUB_TOOL_MODE;
+    });
+
+    it.each([
+      ['defaults to per-source', {}, [], { mode: 'per-source', source: 'default' }],
+      ['reads DBHUB_TOOL_MODE', { DBHUB_TOOL_MODE: 'unified' }, [], { mode: 'unified', source: 'environment variable' }],
+      ['reads --tool-mode', {}, ['--tool-mode=unified'], { mode: 'unified', source: 'command line argument' }],
+      ['prefers --tool-mode over the env var', { DBHUB_TOOL_MODE: 'unified' }, ['--tool-mode=per-source'],
+        { mode: 'per-source', source: 'command line argument' }],
+    ])('%s', (_label, env, argv, expected) => {
+      Object.assign(process.env, env);
+      process.argv = ['node', 'script.js', ...argv];
+
+      expect(resolveToolMode()).toEqual(expected);
+    });
+
+    it.each([
+      ['flag', {}, ['--tool-mode=bogus']],
+      ['env var', { DBHUB_TOOL_MODE: 'bogus' }, []],
+    ])('throws on an invalid %s value', (_label, env, argv) => {
+      Object.assign(process.env, env);
+      process.argv = ['node', 'script.js', ...argv];
+
+      expect(() => resolveToolMode()).toThrow(/per-source.*unified/);
     });
   });
 

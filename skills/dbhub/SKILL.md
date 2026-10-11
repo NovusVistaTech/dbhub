@@ -20,6 +20,8 @@ DBHub provides two MCP tools by default, plus opt-in ones:
 
 If multiple databases are configured, DBHub registers separate tools for each source (for example, `search_objects_prod_pg`, `execute_sql_staging_mysql`). Select the desired database by calling the correspondingly named tool.
 
+If a tool such as `execute_sql` has a `source_id` parameter (DBHub is in unified tool mode), pass one of the ids from its enum instead of choosing a per-source tool name; the tool description lists each source.
+
 If `explain_sql` is available (check the tool list), prefer it over guessing whether a query will be efficient — it's always safe to call, even against a write-enabled or read-only source, since it never executes the statement.
 
 If `health_check` is available and a query seems slow or connections seem exhausted, call it before speculating — it reports live connection pool and cache-hit numbers instead of guessing at the cause.

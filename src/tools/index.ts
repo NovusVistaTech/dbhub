@@ -1,15 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { createExecuteSqlToolHandler, executeSqlInputSchema } from "./execute-sql.js";
-import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema } from "./search-objects.js";
-import { createExplainSqlToolHandler, explainSqlInputSchema } from "./explain-sql.js";
-import { createHealthCheckToolHandler, healthCheckInputSchema } from "./health-check.js";
+import { z } from "zod";
+import { createExecuteSqlToolHandler, executeSqlInputSchema, executeSqlSchema } from "./execute-sql.js";
+import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema, searchDatabaseObjectsSchema } from "./search-objects.js";
+import { createExplainSqlToolHandler, explainSqlInputSchema, explainSqlSchema } from "./explain-sql.js";
+import { createHealthCheckToolHandler, healthCheckInputSchema, healthCheckSchema } from "./health-check.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import {
   getExecuteSqlMetadata,
   getSearchObjectsMetadata,
   getExplainSqlMetadata,
   getHealthCheckMetadata,
+  getUnifiedBuiltinMetadata,
 } from "../utils/tool-metadata.js";
+import { getToolMode } from "../utils/tool-handler-helpers.js";
 import { classifySQL } from "../utils/sql-access-policy.js";
 import { createCustomToolHandler, getCustomToolInputSchema } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
@@ -19,6 +22,7 @@ import {
   BUILTIN_TOOL_SEARCH_OBJECTS,
   BUILTIN_TOOL_EXPLAIN_SQL,
   BUILTIN_TOOL_HEALTH_CHECK,
+  ALL_BUILTIN_TOOL_NAMES,
 } from "./builtin-tools.js";
 
 /**
@@ -35,13 +39,17 @@ export function registerTools(server: McpServer): void {
 
   const registry = getToolRegistry();
 
+  const unified = getToolMode() === "unified";
+
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
     const enabledTools = registry.getEnabledToolConfigs(sourceId);
 
     for (const toolConfig of enabledTools) {
       // Register based on tool name (built-in vs custom)
-      if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
+      if (unified && ALL_BUILTIN_TOOL_NAMES.includes(toolConfig.name as never)) {
+        continue; // registered once for all sources below
+      } else if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
         registerExecuteSqlTool(server, sourceId);
       } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
         registerSearchObjectsTool(server, sourceId);
@@ -55,6 +63,42 @@ export function registerTools(server: McpServer): void {
       }
     }
   }
+
+  if (unified) {
+    registerUnifiedTool(server, sourceIds, BUILTIN_TOOL_EXECUTE_SQL, executeSqlSchema, createExecuteSqlToolHandler);
+    registerUnifiedTool(server, sourceIds, BUILTIN_TOOL_SEARCH_OBJECTS, searchDatabaseObjectsSchema, createSearchDatabaseObjectsToolHandler);
+    registerUnifiedTool(server, sourceIds, BUILTIN_TOOL_EXPLAIN_SQL, explainSqlSchema, createExplainSqlToolHandler);
+    registerUnifiedTool(server, sourceIds, BUILTIN_TOOL_HEALTH_CHECK, healthCheckSchema, createHealthCheckToolHandler);
+  }
+}
+
+/**
+ * Unified mode: register one built-in tool for all sources that enable it,
+ * selected by a required `source_id`. Per-source readonly/max_rows still apply
+ * because the handler for the chosen source reads that source's tool config.
+ * Nothing is registered when no source enables the tool.
+ */
+function registerUnifiedTool(
+  server: McpServer,
+  sourceIds: string[],
+  baseName: string,
+  shape: z.ZodRawShape,
+  createHandler: (sourceId: string) => (args: any, extra: any) => Promise<any>
+): void {
+  const registry = getToolRegistry();
+  const ids = sourceIds.filter((id) => registry.getBuiltinToolConfig(baseName, id));
+  if (ids.length === 0) return;
+
+  const { description, annotations } = getUnifiedBuiltinMetadata(baseName, ids);
+  server.registerTool(
+    baseName,
+    {
+      description,
+      inputSchema: z.object({ source_id: z.enum(ids as [string, ...string[]]), ...shape }),
+      annotations,
+    },
+    (args: any, extra: any) => createHandler(args.source_id)(args, extra)
+  );
 }
 
 /**
